@@ -2,18 +2,13 @@ using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Configuration;
 using HarmonyLib;
-using UnityEngine;
 using System.Threading.Tasks;
 using YoutubeDLSharp;
 using System.IO;
 using UnityEngine.InputSystem;
 using System.Net.Http;
 using System;
-using Newtonsoft.Json.Linq;
-using System.Threading;
-using System.ComponentModel;
 using System.Net;
-using static System.Net.WebRequestMethods;
 using YoutubeDLSharp.Options;
 using BestestTVModPlugin;
 
