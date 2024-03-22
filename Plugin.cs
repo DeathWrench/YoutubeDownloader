@@ -14,14 +14,17 @@ using BestestTVModPlugin;
 using YoutubeDLSharp.Metadata;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using System.Collections.Generic;
 
-namespace LethalCompanyTemplate
+namespace YoutubeDownloader
 {
-    [BepInPlugin("DeathWrench.YoutubeDownloader", "\u200bYoutubeDownloader", "0.0.1")]
+    [BepInPlugin("DeathWrench.YoutubeDownloader", "\u200bYoutubeDownloader", "0.0.3")]
     [BepInDependency("DeathWrench.BestestTelevisionMod", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
     {
         private ConfigEntry<bool> playlistModeActivated;
+        private ConfigEntry<bool> skipDownloadEnabled;
+        private ConfigEntry<bool> deleteTelevisionVideos;
         private ConfigEntry<Key> downloadKeyBind;
         private ConfigEntry<string> defaultVideoUrl;
         private ConfigEntry<int> startOfPlaylist;
@@ -38,20 +41,36 @@ namespace LethalCompanyTemplate
         string ytDlpPath = Path.Combine(libraryPath, "yt-dlp.exe");
         //string ffmpegPath = Path.Combine(libraryPath, "ffmpeg.exe");
         string televisionVideosPath = Path.Combine(pluginPath, "Television Videos");
+
         private async void Start()
         {
             Log.LogInfo($"Plugin {"DeathWrench.YoutubeDownloader"} is loaded!");
 
             playlistModeActivated = Config.Bind("Settings", "Playlist Mode", false, "Download playlists?");
+            skipDownloadEnabled = Config.Bind<bool>("Settings", "Skip Downloads", false, "Enable skipping downloads if the file already exists. This is ignored in Playlist Mode.");
             downloadKeyBind = Config.Bind("Settings", "Download Keybind", Key.Semicolon, "Which key to press to initiate YouTube video download.");
-            defaultVideoUrl = Config.Bind("Settings", "Default Video URL", "https://www.youtube.com/watch?v=4Nty0riqSOs", "Default YouTube video URL for downloading.");
+            defaultVideoUrl = Config.Bind("Settings", "Video URL", "https://www.youtube.com/watch?v=4Nty0riqSOs", "YouTube video URL for downloading.");
             startOfPlaylist = Config.Bind("Settings", "Start of Playlist", 1, "Select specific videos in a playlist to download. Setting to 5 will download the 5th video in the playlist.");
-            endOfPlaylist = Config.Bind("Settings", "End of Playlist", 999999, "Which video to stop downloading at. Setting to 7 with start set to 5 will only download the 5th,6th, and 7th videos.");
+            endOfPlaylist = Config.Bind("Settings", "End of Playlist", 999999, "Which video to stop downloading at. Setting to 7 with start set to 5 will only download the 5th, 6th, and 7th videos.");
+            deleteTelevisionVideos = Config.Bind<bool>("Settings", "Delete Videos", false, "Delete the downloaded videos every time the game starts?");
+
 
             // Create Television Videos folder if it doesn't exist
             if (!Directory.Exists(televisionVideosPath))
             {
                 Directory.CreateDirectory(televisionVideosPath);
+            }
+
+            if (deleteTelevisionVideos.Value)
+            {
+                // Get all files with the ".mp4" extension inside the directory
+                string[] filesToDelete = Directory.GetFiles(televisionVideosPath, "*.mp4");
+
+                // Delete each file
+                foreach (string fileToDelete in filesToDelete)
+                {
+                    File.Delete(fileToDelete);
+                }
             }
 
             if (!Directory.Exists(libraryPath))
@@ -169,10 +188,12 @@ namespace LethalCompanyTemplate
         {
             // Check if any of the config entries have changed
             if (playlistModeActivated.Value != Config.Bind<bool>("Settings", "Playlist Mode", playlistModeActivated.Value).Value ||
+                skipDownloadEnabled.Value != Config.Bind<bool>("Settings", "Skip Downloads", skipDownloadEnabled.Value).Value ||
                 downloadKeyBind.Value != Config.Bind<Key>("Settings", "Download Keybind", downloadKeyBind.Value).Value ||
-                defaultVideoUrl.Value != Config.Bind<string>("Settings", "Default Video URL", defaultVideoUrl.Value).Value ||
+                defaultVideoUrl.Value != Config.Bind<string>("Settings", "Video URL", defaultVideoUrl.Value).Value ||
                 startOfPlaylist.Value != Config.Bind<int>("Settings", "Start of Playlist", startOfPlaylist.Value).Value ||
-                endOfPlaylist.Value != Config.Bind<int>("Settings", "End of Playlist", endOfPlaylist.Value).Value)
+                endOfPlaylist.Value != Config.Bind<int>("Settings", "End of Playlist", endOfPlaylist.Value).Value ||
+                deleteTelevisionVideos.Value != Config.Bind<bool>("Settings", "Delete Videos", deleteTelevisionVideos.Value).Value)
             {
                 // Config has changed
                 return true;
@@ -185,11 +206,14 @@ namespace LethalCompanyTemplate
         {
             // Update settings with new values from config
             playlistModeActivated.Value = Config.Bind<bool>("Settings", "Playlist Mode", playlistModeActivated.Value).Value;
+            skipDownloadEnabled.Value = Config.Bind<bool>("Settings", "Skip Downloads", skipDownloadEnabled.Value).Value;
             downloadKeyBind.Value = Config.Bind<Key>("Settings", "Download Keybind", downloadKeyBind.Value).Value;
-            defaultVideoUrl.Value = Config.Bind<string>("Settings", "Default Video URL", defaultVideoUrl.Value).Value;
+            defaultVideoUrl.Value = Config.Bind<string>("Settings", "Video URL", defaultVideoUrl.Value).Value;
             startOfPlaylist.Value = Config.Bind<int>("Settings", "Start of Playlist", startOfPlaylist.Value).Value;
             endOfPlaylist.Value = Config.Bind<int>("Settings", "End of Playlist", endOfPlaylist.Value).Value;
+            deleteTelevisionVideos.Value = Config.Bind<bool>("Settings", "Delete Videos", deleteTelevisionVideos.Value).Value;
         }
+
 
         private bool CheckForNewFiles()
         {
@@ -397,160 +421,59 @@ namespace LethalCompanyTemplate
             return false; // Video does not exist
         }
 
-
-        /*private async Task<List<string>> GetVideoIdsFromPlaylist(string playlistUrl)
-        {
-            List<string> videoIds = new List<string>();
-
-            // Fetch the HTML content of the playlist page
-            string htmlContent = await DownloadHtmlContent(playlistUrl);
-
-            if (htmlContent != null)
-            {
-                // Use regular expressions to extract video IDs from the HTML content
-                MatchCollection matches = Regex.Matches(htmlContent, @"""videoId"":""([^""]+)""");
-
-                foreach (Match match in matches)
-                {
-                    string videoId = match.Groups[1].Value;
-                    videoIds.Add(videoId);
-                }
-            }
-
-            return videoIds;
-        }
-
-        private async Task<string> DownloadHtmlContent(string url)
-        {
-            try
-            {
-                using (HttpClient client = new HttpClient())
-                {
-                    HttpResponseMessage response = await client.GetAsync(url);
-                    response.EnsureSuccessStatusCode();
-                    string htmlContent = await response.Content.ReadAsStringAsync();
-                    return htmlContent;
-                }
-            }
-            catch (HttpRequestException ex)
-            {
-                Log.LogError($"Error downloading HTML content from {url}: {ex.Message}");
-                return null;
-            }
-        }
-        private async Task<bool> IsPlaylistAlreadyDownloaded(string playlistUrl, string destinationFolder)
-        {
-            List<string> videoIds = await GetVideoIdsFromPlaylist(playlistUrl);
-            bool playlistDownloaded = false;
-
-            if (videoIds.Count == 0)
-            {
-                Log.LogError($"Failed to fetch video IDs from playlist URL: {playlistUrl}");
-                HUDManager.Instance.DisplayTip("Download Error", "Failed to fetch video IDs from the playlist URL.", false, false, "DownloadErrorTip");
-                return false; // Unable to determine, assuming not downloaded
-            }
-
-            foreach (string videoId in videoIds)
-            {
-                string fileNamePattern = $@"\[{Regex.Escape(videoId)}\]\.mp4"; // Escaping videoId to avoid regex injection
-                Regex regex = new Regex(fileNamePattern);
-
-                // Check if any file in the destination folder corresponds to the video ID
-                bool videoExists = false;
-                string[] files = Directory.GetFiles(destinationFolder);
-                foreach (string filePath in files)
-                {
-                    string fileName = Path.GetFileName(filePath);
-                    if (regex.IsMatch(fileName))
-                    {
-                        videoExists = true;
-                        break; // Found a matching file, no need to continue checking
-                    }
-                }
-
-                // If the video exists, display a tip and skip the download
-                if (videoExists)
-                {
-                    Log.LogInfo($"Video with ID '{videoId}' already exists. Skipping download.");
-                    HUDManager.Instance.DisplayTip("Download Skipped", $"Video with ID '{videoId}' already exists. Skipping download.", false, false, "DownloadSkippedTip");
-                }
-                else
-                {
-                    // Video doesn't exist, mark the playlist as not fully downloaded
-                    playlistDownloaded = false;
-                }
-            }
-
-            // If all videos exist, mark the playlist as fully downloaded
-            if (playlistDownloaded)
-            {
-                HUDManager.Instance.DisplayTip("Download Complete", "All videos in the playlist are already downloaded.", false, false, "DownloadCompleteTip");
-            }
-            else
-            {
-                HUDManager.Instance.DisplayTip("Download Incomplete", "Some videos in the playlist are missing and need to be downloaded.", false, false, "DownloadIncompleteTip");
-            }
-
-            return playlistDownloaded;
-        }*/
-
-
         private async Task DownloadPlaylist(string playlistUrl, string destinationFolder)
         {
-            Log.LogInfo("Downloading video...");
+            Log.LogInfo("Downloading playlist...");
 
-            // Check if the video is already downloaded
-            bool alreadyDownloaded = await IsVideoAlreadyDownloaded(playlistUrl, destinationFolder);
-            if (alreadyDownloaded)
-            {
-                // Display a message indicating that the video is already downloaded
-                HUDManager.Instance.DisplayTip("Download Skipped", "The video is already downloaded.", false, false, "DownloadSkippedTip");
-                return;
-            }
+                // Set the output folder to the specified destination folder
+                ytdl.OutputFolder = destinationFolder;
 
-            // Set the output folder to the specified destination folder
-            ytdl.OutputFolder = destinationFolder;
+                // Define options for the playlist download
+                var options = new OptionSet()
+                {
+                    //NoContinue = true,
+                    //RestrictFilenames = true,
+                    Format = "best",
+                    RecodeVideo = VideoRecodeFormat.Mp4,
+                    //Exec = "echo {}"
+                };
 
-            var options = new OptionSet()
-            {
-                //NoContinue = true,
-                //RestrictFilenames = true,
-                Format = "best",
-                RecodeVideo = VideoRecodeFormat.Mp4,
-                //Exec = "echo {}"
-            };
+                // Download the playlist
+                var res = await ytdl.RunVideoPlaylistDownload(
+                    playlistUrl,
+                    overrideOptions: options,
+                    start: startOfPlaylist.Value,
+                    end: endOfPlaylist.Value
+                );
 
-            var res = await ytdl.RunVideoPlaylistDownload(
-            playlistUrl, overrideOptions: options,
-            start: startOfPlaylist.Value, end: endOfPlaylist.Value
-               );
+                if (res == null)
+                {
+                    // Display an error message if the download fails
+                    HUDManager.Instance.DisplayTip("Download Error", "Failed to download the playlist.", false, false, "DownloadErrorTip");
+                    return;
+                }
 
-            if (res == null)
-            {
-                // Display an error message if the download fails
-                HUDManager.Instance.DisplayTip("Download Error", "Failed to download the video.", false, false, "DownloadErrorTip");
-                return;
-            }
+                // Display a message indicating that the download is complete
+                HUDManager.Instance.DisplayTip("Download Complete", "The playlist has been successfully downloaded.", false, false, "DownloadCompleteTip");
 
-            // Display a message indicating that the download is complete
-            HUDManager.Instance.DisplayTip("Download Complete", "The video has been successfully downloaded.", false, false, "DownloadCompleteTip");
-
-
-            // After downloading, reset the list of videos and load them again
-            VideoManager.Videos.Clear();
-            VideoManager.Load();
+                // After downloading, reset the list of videos and load them again
+                VideoManager.Videos.Clear();
+                VideoManager.Load();
         }
         private async Task DownloadVideo(string videoUrl, string destinationFolder)
         {
             Log.LogInfo("Downloading video...");
 
-            // Check if the video is already downloaded
-            bool alreadyDownloaded = await IsVideoAlreadyDownloaded(videoUrl, destinationFolder);
-            if (alreadyDownloaded)
+            if (skipDownloadEnabled.Value)
             {
-                // Display a message indicating that the video is already downloaded
-                HUDManager.Instance.DisplayTip("Download Skipped", "The video is already downloaded.", false, false, "DownloadSkippedTip");
-                return;
+                // Check if the video is already downloaded
+                bool alreadyDownloaded = await IsVideoAlreadyDownloaded(videoUrl, destinationFolder);
+                if (alreadyDownloaded) 
+                { 
+                    // Display a message indicating that the video is already downloaded
+                    HUDManager.Instance.DisplayTip("Download Skipped", "The video is already downloaded.", false, false, "DownloadSkippedTip");
+                    return;
+                }
             }
 
             // Set the output folder to the specified destination folder
