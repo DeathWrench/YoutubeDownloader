@@ -14,11 +14,10 @@ using BestestTVModPlugin;
 using YoutubeDLSharp.Metadata;
 using System.Text.RegularExpressions;
 using UnityEngine;
-using System.Collections.Generic;
 
 namespace YoutubeDownloader
 {
-    [BepInPlugin("DeathWrench.YoutubeDownloader", "\u200bYoutubeDownloader", "0.0.3")]
+    [BepInPlugin("DeathWrench.YoutubeDownloader", "\u200bYoutubeDownloader", "0.0.4")]
     [BepInDependency("DeathWrench.BestestTelevisionMod", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
     {
@@ -233,6 +232,8 @@ namespace YoutubeDownloader
             // Reset the list of videos and load them again
             VideoManager.Videos.Clear();
             VideoManager.Load();
+            if (ConfigManager.reloadedVideosHUD.Value)
+            { HUDManager.Instance.DisplayTip("Reloaded Videos", "Video list has been reloaded.", false, false, "ReloadVideosTip"); }
         }
 
         private async Task DownloadLatestYtDlpRelease(string destinationFolder)
